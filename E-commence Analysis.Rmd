@@ -1,10 +1,10 @@
 Project Description: 
 
 STEP 1: Environment set up
-1.1 Load required packages
-1.2 set up work directory (based on where you save the file)
-1.3 use fread to load 4 data tables
-1.4 sanity check for data tables
+    a. Load required packages
+    b. set up work directory (based on where you save the file)
+    c. use fread to load 4 data tables
+    d. sanity check for data tables
 ```{r}
 # 1
 library(data.table)
@@ -16,7 +16,7 @@ library(caret)
 options(scipen=999)
 
 # 2
-path ='/Users/David/Desktop/Project\ Ecommece'
+path =getwd()
 setwd(path)
 # 3
 customer_table <- fread("customer_table.csv")
@@ -30,19 +30,30 @@ order_table[,customer_id := as.character(order_table$customer_id)]
 order_table[,order_id := as.character(order_table$order_id)]
 order_table[,product_id := as.character(order_table$product_id)]
 product_table[,product_id := as.character(product_table$product_id)]
+
+
 ```
-if you meets error, try:  install.packages("the library name")
+```{r}
+# Summary statistics
+category_table
+```
 
 
-STEP 2: Get targeted audience
-2.1  select users who didn't purchase anything between 2016/12/22 and 2017/02/22, aka this group of users went dormant for 3 months.
-2.2 
-2.3
+STEP 2: Get targeted audience 
+  a. dorman_3month: select users who purchase once before 2016/12/22, then didn't purchase anything between 2016/12/22 and 2017/02/22, this group of users went dormant for 3 months.
+  b. If users who dormant 3 months purchase anything between 2017/02/22 and 2017/05/22, flag them as 1, otherwise 0;
+  c. remove temporary tables
 
-
+  use sqldf and data.table for data selection.
 ```{r}
 head(order_table)
 attach(order_table)
+
+base=sqldf("SELECT ")
+
+
+
+
 have_purchase=sqldf(
   "SELECT customer_id, max(order_date) as Latest_order_time
   FROM order_table
@@ -50,12 +61,21 @@ have_purchase=sqldf(
   GROUP BY 1"
 )
 
-## find customers who were dormant between 2016/12/22 and 2017/02/22
+# find customers who were dormant between 2016/12/22 and 2017/02/22
 dormant_3month = sqldf("SELECT * 
                         FROM base 
                         WHERE customer_id NOT IN 
                         (SELECT customer_id FROM purchase_again)")
 
+
+## find customers who only made one purchase before 2016/12/22
+base <- subset( 
+    order_table[
+       order_date<'20161222'&order_amount>0,
+       .(count=.N, order_date=max(order_date), order_amount=max(order_amount),product_id=max(product_id)),
+       by=customer_id
+    ],
+    count==1)
 
 ## find customers who purchased again between 2017/02/23 and 2017/05/22
 purchase_flag = sqldf("SELECT customer_id
@@ -84,20 +104,22 @@ gc()
 
 ```
 
-3. Data pre-processing
-3.1 remove ML unrelated field
-
+STEP 3. Data pre-processing
+  a. remove ML unrelated fields
+  b. Sanity check
+  c. Skewness check
+  d. normalize all continuous variables
+  e. Dummy categorical variables
+  
+  use data.table for data manipulation.
 ```{r}
 ## remove ML unrelated field
 user_features[,c("customer_id","last_visit_date","age") := NULL]
 
 ## calculate new features, how long has this customer been around?
-user_features[,tenure := as.numeric(as.Date("2017-02-22") - 
-                                      as.Date(first_visit_date))]
+user_features[,tenure := as.numeric(as.Date("2017-02-22") - as.Date(first_visit_date))]
 user_features[,days_since_first_order := as.numeric(as.Date("2017-02-22") -
-                                                      as.Date(as.character(order_date),format='%Y%m%d'))]
-
-
+as.Date(as.character(order_date),format='%Y%m%d'))]
 
 user_features <- data.table(
   sqldf(" 
@@ -185,9 +207,12 @@ rf <- foreach(ntree=rep(200, 6), .combine=combine, .multicombine=TRUE,
               }
 ```
 
-
-STEP 6: Try KNN, Neural Net
-
+STEP 6 Evaluate performance
+  a. get prediction accuracy
+  b. Understand the impact: 
+  c. Try KNN, Neural Net
+  
+use ROCR package to produce ROC curve, and precision-recall curve with model predictions on test dataset
 ```{r}
 
 
@@ -222,4 +247,8 @@ second_order$order_date <- as.Date(as.character(second_order$order_date),format=
 
 user_stats <- sqldf("SELECT so.customer_id, SUM(oa.order_amount) AS sum_rev FROM second_order so INNER JOIN orders_after2 oa ON so.customer_id = so.customer_id WHERE oa.order_date - so.order_date <= 183 GROUP BY 1;")
 ```
+
+Code Cheatsheet:
+
+
 
