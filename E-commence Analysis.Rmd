@@ -49,10 +49,15 @@ STEP 2: Get targeted audience
 head(order_table)
 attach(order_table)
 
-base=sqldf("SELECT ")
 
-
-
+## find customers who only made one purchase before 2016/12/22
+base <- subset( 
+    order_table[
+       order_date<'20161222'&order_amount>0,
+       .(count=.N, order_date=max(order_date), order_amount=max(order_amount),product_id=max(product_id)),
+       by=customer_id
+    ],
+    count==1)
 
 have_purchase=sqldf(
   "SELECT customer_id, max(order_date) as Latest_order_time
@@ -66,16 +71,6 @@ dormant_3month = sqldf("SELECT *
                         FROM base 
                         WHERE customer_id NOT IN 
                         (SELECT customer_id FROM purchase_again)")
-
-
-## find customers who only made one purchase before 2016/12/22
-base <- subset( 
-    order_table[
-       order_date<'20161222'&order_amount>0,
-       .(count=.N, order_date=max(order_date), order_amount=max(order_amount),product_id=max(product_id)),
-       by=customer_id
-    ],
-    count==1)
 
 ## find customers who purchased again between 2017/02/23 and 2017/05/22
 purchase_flag = sqldf("SELECT customer_id
@@ -114,7 +109,7 @@ STEP 3. Data pre-processing
   use data.table for data manipulation.
 ```{r}
 ## remove ML unrelated field
-user_features[,c("customer_id","last_visit_date","age") := NULL]
+user_features[,c("customer_id","last_visit_date","age"):= NULL]
 
 ## calculate new features, how long has this customer been around?
 user_features[,tenure := as.numeric(as.Date("2017-02-22") - as.Date(first_visit_date))]
