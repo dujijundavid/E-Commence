@@ -29,18 +29,15 @@ last= customer_table_down$last_visit_date
 
 
 
-
-
-
 # Trial
-
 # convert datetime
 first[1]
 as.numeric(as.Date(first))
-
 date=as.numeric(as.Date(last)-(as.Date(first)))
 
 # Important date
+DT[i, j, by]
+
 
 
 
