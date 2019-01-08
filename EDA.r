@@ -36,8 +36,20 @@ as.numeric(as.Date(first))
 date=as.numeric(as.Date(last)-(as.Date(first)))
 
 # Important date
-DT[i, j, by]
+
+order_agg= sqldf("SELECT sum(order_amount) as amount, order_date as date FROM order_table_down 
+                 GROUP BY order_date
+                  HAVING order_date<20161231 and order_date >20160101
+                    
+                 ORDER BY order_date")
+
+g1=ggplot(order_agg, aes(x=date, y=amount)) + 
+  geom_point(col="steelblue", size=2) +   # Set static color and size for points
+  geom_smooth(method="lm", col="firebrick") +  # change the color of line
+  labs(title="Order Trends", y="order_amount", x="order_date", caption="2016 data")
+plot(g1)
 
 
 
+order_agg$date
 

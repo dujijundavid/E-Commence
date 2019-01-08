@@ -33,11 +33,14 @@ order_table[,order_id := as.character(order_table$order_id)]
 order_table[,product_id := as.character(order_table$product_id)]
 product_table[,product_id := as.character(product_table$product_id)]
 
+end_time <- Sys.time()
+print('Setup environment uses')
+end_time-start_time
 
 ```
 
 STEP 2: Get targeted audience 
-  a. dorman_3month: select users who purchase once before 2016/12/22, then didn't purchase anything between 2016/12/22 and 2017/02/22, this group of users went dormant for 3 months.
+  a. dorman_3month: select users who purchase once before 2016/12/22, then didn't purchase anything between 2016/12/22 and 2017/02/22, this group of users went dormant for 2 months.
   b. If users who dormant 3 months purchase anything between 2017/02/22 and 2017/05/22, flag them as 1, otherwise 0;
   c. remove temporary tables
 
@@ -45,8 +48,6 @@ STEP 2: Get targeted audience
 ```{r}
 # head(order_table)
 # attach(order_table)
-
-
 
 #  customers who only made one purchase before 2016/12/22 
 # method 1
