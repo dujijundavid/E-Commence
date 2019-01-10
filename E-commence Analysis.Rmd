@@ -3,11 +3,13 @@ Project Description:
 STEP 1: Environment set up
     a. Load required packages
     b. set up work directory (based on where you save the file)
-    c. use fread to load 4 data tables
-    d. sanity check for data tables
+    c. set Debug mode
+    d. use fread to load 4 data tables
+    e. sanity check for data tables
+    
 ```{r}
 start_time=Sys.time()
-# 1
+# a
 library(data.table)
 library(sqldf)
 library(doMC)
@@ -17,58 +19,60 @@ library(caret)
 library(tictoc)
 options(scipen=999)
 
-# 2
+# b
 path =getwd()
 setwd(path)
-# 3
-customer_table = fread("customer_table.csv")
-order_table = fread("order_table.csv")
-product_table = fread("product_table.csv")
-category_table = fread("category_table.csv")
+# c
+debug_mode=TRUE
+if(debug_mode==TRUE){
+  load('down_dataset.RData')
+  customer_table=customer_table_down
+  order_table=order_table_down
+  product_table=product_table_down
+  category_table=category_table_down
+  rm(customer_table_down,order_table_down,product_table_down,category_table_down)
+}else{
+  # d
+  customer_table = fread("customer_table.csv")
+  order_table = fread("order_table.csv")
+  product_table = fread("product_table.csv")
+  category_table = fread("category_table.csv")
+}
 
+# e
 # to change from scientific notation to the actual number
 customer_table[,customer_id := as.character(customer_table$customer_id)]
 order_table[,customer_id := as.character(order_table$customer_id)]
 order_table[,order_id := as.character(order_table$order_id)]
 order_table[,product_id := as.character(order_table$product_id)]
 product_table[,product_id := as.character(product_table$product_id)]
-
 end_time <- Sys.time()
 print('Setup environment uses')
 end_time-start_time
-
 ```
 
 STEP 2: Get targeted audience 
+  Timeline:               
+   Time 0. before          0~1  customer_base
+   Time 1. 20161222        1~2  dormant_users (no purchase during this period)
+   Time 2. 20170222        2~3  purchase_flag (whether a customer from base made purchase)
+   Time 3. 20170522 
+   base 
+
   a. dorman_3month: select users who purchase once before 2016/12/22, then didn't purchase anything between 2016/12/22 and 2017/02/22, this group of users went dormant for 2 months.
   b. If users who dormant 3 months purchase anything between 2017/02/22 and 2017/05/22, flag them as 1, otherwise 0;
   c. remove temporary tables
 
   use sqldf and data.table for data selection.
 ```{r}
-# head(order_table)
-# attach(order_table)
 
-#  customers who only made one purchase before 2016/12/22 
-# method 1
 tic()
-base = subset( 
-    order_table[
-       order_date<'20161222'&order_amount>0,
-       .(count=.N, order_date=max(order_date), order_amount=max(order_amount),product_id=max(product_id)),
+base = subset( order_table[order_date<'20161222'&order_amount>0,
+       .(count=.N, order_date=max(order_date),order_amount=max(order_amount),product_id=max(product_id)),
        by=customer_id
     ], count==1)
 toc()
 
-tic()
-base2=sqldf("SELECT count(order_id) as count, max(order_amount) as order_amount, max(order_date) as order_date, product_id=max(product_id)
-             FROM order_table 
-             WHERE order_date<'20161222' & order_amount>0  
-             GROUP BY customer_id 
-              Having count==1")
-toc()
-
-# data.table data manipulation is 5.5 times more efficient compare to SQL
 
 purchase_again=sqldf(
   "SELECT customer_id, max(order_date) as Latest_order_time
@@ -117,13 +121,13 @@ STEP 3. Data pre-processing
   c. Skewness check
   d. normalize all continuous variables
   e. Dummy categorical variables
-  
+
   use data.table for data manipulation.
 ```{r}
-## remove ML unrelated field
+# remove ML unrelated field
 user_features[,c("customer_id","last_visit_date","age"):= NULL]
 
-## calculate new features, how long has this customer been around?
+# calculate new features, how long has this customer been around?
 user_features[,tenure := as.numeric(as.Date("2017-02-22") - as.Date(first_visit_date))]
 user_features[,days_since_first_order := as.numeric(as.Date("2017-02-22") -
 as.Date(as.character(order_date),format='%Y%m%d'))]
@@ -138,18 +142,18 @@ user_features = data.table(
 
 user_features[,c("first_visit_date","order_date","product_id") := NULL]
 
-## deal with missing value: fill all NA's with 0
+# deal with missing value: fill all NA's with 0
 user_features$category_id[is.na(user_features$category_id)] = 'unknown'
 user_features$latest_device_class[is.na(user_features$latest_device_class)] = 'unknown'
 user_features[is.na(user_features)] = 0
 
-## find out top 20 countries
+# find out top 20 countries
 top_countries = as.character(as.matrix(user_features[,list(Count=.N), by = country][order(-Count)][1:30][,.(country)]))
 
 user_features[,country_updated := ifelse(country %in% top_countries,country,'others')]
 user_features[,c("country") := NULL]
 
-## dummy variables
+# dummy variables
 country_dummy = model.matrix( ~ country_updated - 1, data=user_features)
 gender_dummy = model.matrix( ~ gender - 1, data=user_features)
 category_dummy = model.matrix( ~ category_id - 1, data=user_features)
@@ -159,12 +163,12 @@ user_features_combined = cbind(user_features,country_dummy,gender_dummy,category
 user_features_combined[,c("country_updated","gender","category_id","latest_device_class") := NULL]
 rm(country_dummy,gender_dummy,category_dummy,deviceclass_dummy)
 
-## zero variance variable
+# zero variance variable
 zero_variance = names(Filter(function(x)(length(unique(x)) == 1),user_features_combined))
-## filter out zero variance variable
+# filter out zero variance variable
 user_features_combined = Filter(function(x)(length(unique(x)) > 1),user_features_combined)
 
-## transform continuous variables
+# transform continuous variables
 transform_columns = c("user_feature","phone_feature","tablet_feature","family_size","number_of_devices","tenure","order_amount","days_since_first_order")
 transformed_column     = user_features_combined[ ,grepl(paste(transform_columns, collapse = "|"),names(user_features_combined)),with = FALSE]
 non_transformed_column = user_features_combined[ ,-grepl(paste(transform_columns, collapse = "|"),names(user_features_combined)),with = FALSE]
@@ -173,11 +177,13 @@ transformed_column_processed = predict(preProcess(transformed_column, method = c
 
 transformedAll = cbind(non_transformed_column, transformed_column_processed)
 rm(customer_table,order_table,product_table,user_features,transformed_column_processed,transformed_column,non_transformed_column)
-
+gc()
 ```
 
 
 STEP 4: set up training & testing
+  - Set train_rate, train_test_split
+  - set target variable as is converted, set train and test
 ```{r}
 set.seed(1003)
 
@@ -197,20 +203,30 @@ test_y = as.factor(apply(subset(test_data, select = c(is_converted)), 2, as.fact
 
 
 STEP 5: Train model
+  - Parrell with 6 cores
+  - Lasso logistic Regression
+  - ridge logistic Regression
+  - Random forest
 
 ```{r}
 registerDoMC(cores=6)
+debug_mode=TRUE
+if(debug_mode==TRUE){
+  n=10000
+}else{
+  n=nrow(train_x)
+}
 
 #### Lasso Logistic Regression
-model_glm_cv_lasso = cv.glmnet(data.matrix(train_x),train_y_categorial,alpha = 1,family="binomial",type.measure="auc",parallel=TRUE)
+model_glm_cv_lasso = cv.glmnet(data.matrix(train_x[1:n,]),train_y_categorial[1:n],alpha = 1,family="binomial",type.measure="auc",parallel=TRUE)
 
 #### Ridge Logistic Regression
-model_glm_cv_ridge = cv.glmnet(data.matrix(train_x),train_y_categorial,alpha = 0,family="binomial",type.measure="auc",parallel=TRUE)
+model_glm_cv_ridge = cv.glmnet(data.matrix(train_x[1:n,]),train_y_categorial[1:n],alpha = 0,family="binomial",type.measure="auc",parallel=TRUE)
 
 #### Random Forest
 rf = foreach(ntree=rep(200, 6), .combine=combine, .multicombine=TRUE,
               .packages='randomForest') %dopar% {
-                randomForest(train_x, train_y, ntree=ntree)
+                randomForest(train_x[1:n,], train_y[1:n], ntree=ntree)
               }
 ```
 
@@ -252,49 +268,11 @@ orders_sub$order_date = as.Date(as.character(orders_sub$order_date),format='%Y%m
 orders_after2 = subset(orders_sub,order_rank>=3)
 second_order$order_date = as.Date(as.character(second_order$order_date),format='%Y%m%d')
 
-user_stats = sqldf("SELECT so.customer_id, SUM(oa.order_amount) AS sum_rev FROM second_order so INNER JOIN orders_after2 oa ON so.customer_id = so.customer_id WHERE oa.order_date - so.order_date <= 183 GROUP BY 1;")
+# user_stats = sqldf("SELECT so.customer_id, SUM(oa.order_amount) AS sum_rev FROM second_order so INNER JOIN orders_after2 oa ON so.customer_id = so.customer_id WHERE oa.order_date - so.order_date <= 183 GROUP BY 1;")
 
 end_time <- Sys.time()
 end_time - start_time
 ```
-
-Code Cheatsheet:
-#data manipulation:
-  - subset(,-c())
-  - filter
-  - merge(a,b,by="column")
-  
-#data.table
-  Notes: https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html
-  #   R:    i   |  j                | by
-  # SQL:  where | order by   select | update  group by
-  
-  Select column return vector:  ans <- flights[, arr_delay]
-  Select column return data.table: ans <- flights[, list(arr_delay)]
-  
-  Calculate the average arrival and departure delay for all flights with “JFK” as the         origin airport in the month of June.
-  ans <- flights[origin == "JFK" & month == 6L, .(m_arr = mean(arr_delay), m_dep =             mean(dep_delay))]
-
-
-#Data type:
-as.numeric, as.character, data.matrix
-
-#Feature engineering:
-
-#Machine learning
-  Modeling:
-  Lasso: model_glm_cv_lasso = cv.glmnet(data.matrix(train_x),train_y_categorial,alpha =         1,family="binomial",type.measure="auc",parallel=TRUE)
-
-  Train test split:
-    train_rate = 0.6
-    training_index = createDataPartition(transformedAll$is_converted, p = train_rate, list         = FALSE, times = 1)
-    train_data = transformedAll[training_index,]
-    test_data = transformedAll[-training_index,]
-  
-  
-  Predict
-    1. lasso_predict = predict(model_glm_cv_lasso, data.matrix(test_x),type='response')
-    2. lasso_pred = prediction(lasso_predict,test_y)
 
 
 

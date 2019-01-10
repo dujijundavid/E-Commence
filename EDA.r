@@ -27,8 +27,6 @@ last= customer_table_down$last_visit_date
     # dormant: x+91~x+180 no purchase = sub_customer (date, order)
     # Flag target variable: 1 for making purchase in 181~270, 0 otherwise
 
-
-
 # Trial
 # convert datetime
 first[1]
@@ -52,4 +50,10 @@ plot(g1)
 
 
 order_agg$date
-
+library(mice)
+library(Amelia)
+library(ggplot2)
+load('down_dataset.RData')
+train_raw=customer_table_down
+missmap(train_raw[-1], col=c('grey', 'steelblue'), y.cex=0.5, x.cex=0.8)
+sort(sapply(train_raw, function(x) { sum(is.na(x)) }), decreasing=TRUE)
