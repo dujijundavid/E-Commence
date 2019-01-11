@@ -23,7 +23,7 @@ options(scipen=999)
 path =getwd()
 setwd(path)
 # c
-debug_mode=TRUE
+debug_mode=FALSE
 if(debug_mode==TRUE){
   load('down_dataset.RData')
   customer_table=customer_table_down
@@ -71,8 +71,6 @@ base = subset( order_table[order_date<'20161222'&order_amount>0,
        .(count=.N, order_date=max(order_date),order_amount=max(order_amount),product_id=max(product_id)),
        by=customer_id
     ], count==1)
-toc()
-
 
 purchase_again=sqldf(
   "SELECT customer_id, max(order_date) as Latest_order_time
@@ -176,7 +174,7 @@ non_transformed_column = user_features_combined[ ,-grepl(paste(transform_columns
 transformed_column_processed = predict(preProcess(transformed_column, method = c("BoxCox","scale")),transformed_column)
 
 transformedAll = cbind(non_transformed_column, transformed_column_processed)
-rm(customer_table,order_table,product_table,user_features,transformed_column_processed,transformed_column,non_transformed_column)
+rm(customer_table,product_table,user_features,transformed_column_processed,transformed_column,non_transformed_column)
 gc()
 ```
 
